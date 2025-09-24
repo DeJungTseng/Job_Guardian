@@ -18,7 +18,16 @@ from typing import Dict, List, Optional
 import requests
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
-# import FastMCP
+import socket
+import requests.packages.urllib3.util.connection as urllib3_cn
+
+def _force_ipv4():
+    def allowed_gai_family():
+        return socket.AF_INET
+    urllib3_cn.allowed_gai_family = allowed_gai_family
+
+_force_ipv4()
+
 
 # ------------------------------------------------------------
 # 初始化
@@ -68,25 +77,60 @@ def normalize_company_name(name: str) -> str:
 
 
 def _fetch_csv_rows(url: str) -> List[Dict[str, str]]:
-    """下載 CSV → DictReader。以 UTF-8 為主，必要時退回 big5/latin-1。"""
-    r = requests.get(url, timeout=HTTP_TIMEOUT)
-    r.raise_for_status()
-    # 先試 UTF-8
-    try:
-        text = r.content.decode("utf-8")
-    except UnicodeDecodeError:
-        for enc in ("cp950", "big5", "latin-1"):
+    """
+    下載 CSV → DictReader。
+    先嘗試 requests (UA 模擬 curl)，若失敗再 fallback httpx。
+    """
+    import httpx
+
+    # 嘗試多種解碼
+    def _decode_content(content: bytes) -> str:
+        for enc in ("utf-8", "cp950", "big5", "latin-1"):
             try:
-                text = r.content.decode(enc)
-                break
+                return content.decode(enc)
             except UnicodeDecodeError:
                 continue
-    rows = list(csv.DictReader(io.StringIO(text)))
-    # 去除空白欄名
-    fixed = []
-    for row in rows:
-        fixed.append({(k or "").strip(): (v or "").strip() for k, v in row.items()})
-    return fixed
+        # 全部失敗就回傳 binary
+        return content.decode("utf-8", errors="ignore")
+
+    # ---------- 1. 先用 requests ----------
+    try:
+        resp = requests.get(
+            url,
+            timeout=HTTP_TIMEOUT,
+            headers={
+                "User-Agent": "curl/8.5.0",
+                "Accept": "text/csv,*/*;q=0.8",
+            },
+        )
+        resp.raise_for_status()
+        text = _decode_content(resp.content)
+        rows = list(csv.DictReader(io.StringIO(text)))
+        return [{(k or "").strip(): (v or "").strip() for k, v in row.items()} for row in rows]
+
+    except Exception as e_req:
+        print(f"[WARN] requests 抓取失敗，改用 httpx: {e_req}")
+
+    # ---------- 2. fallback httpx ----------
+    try:
+        with httpx.Client(
+            http2=False,
+            timeout=HTTP_TIMEOUT,
+            headers={
+                "User-Agent": "curl/8.5.0",
+                "Accept": "text/csv,*/*;q=0.8",
+            },
+            transport=httpx.HTTPTransport(local_address="0.0.0.0")
+        ) as client:
+            resp = client.get(url)
+            resp.raise_for_status()
+            text = _decode_content(resp.content)
+            rows = list(csv.DictReader(io.StringIO(text)))
+            return [{(k or "").strip(): (v or "").strip() for k, v in row.items()} for row in rows]
+
+    except Exception as e_httpx:
+        raise RuntimeError(f"requests + httpx 都無法抓取 {url}: {e_httpx}")
+
 
 
 def _match_company(row_value: str, user_input: str) -> bool:
