@@ -21,10 +21,12 @@ from mcp.server.fastmcp import FastMCP
 import socket
 import requests.packages.urllib3.util.connection as urllib3_cn
 
+
 def _force_ipv4():
     def allowed_gai_family():
         return socket.AF_INET
     urllib3_cn.allowed_gai_family = allowed_gai_family
+
 
 _force_ipv4()
 
@@ -53,11 +55,14 @@ GE_VIO_URL = os.getenv(
 
 HTTP_TIMEOUT = float(os.getenv("HTTP_TIMEOUT", "30"))
 CASE_SENSITIVE = os.getenv("CASE_SENSITIVE", "false").lower() == "true"
-PARTIAL_MATCH = os.getenv("PARTIAL_MATCH", "false").lower() == "true"  # True: 子字串/模糊包含
+PARTIAL_MATCH = os.getenv(
+    "PARTIAL_MATCH", "false").lower() == "true"  # True: 子字串/模糊包含
 
 # ------------------------------------------------------------
 # 公用：時間/名稱正規化/CSV下載與解析
 # ------------------------------------------------------------
+
+
 def _iso_now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
@@ -132,7 +137,6 @@ def _fetch_csv_rows(url: str) -> List[Dict[str, str]]:
         raise RuntimeError(f"requests + httpx 都無法抓取 {url}: {e_httpx}")
 
 
-
 def _match_company(row_value: str, user_input: str) -> bool:
     """依環境變數設定做精確/包含比對，並處理大小寫與名稱正規化。"""
     if not CASE_SENSITIVE:
@@ -187,7 +191,7 @@ def esg_hr(company: str, year: Optional[int] = None, limit: int = 50) -> dict:
         if not _match_company(comp, company):
             continue
 
-        y = _pick(r, "申報年度", "年度", "Year", "year")
+        y = _pick(r, "申報年度", "年度", "Year", "year", "報告年度")
         if year is not None and (str(year) != str(y)):
             continue
 
@@ -195,10 +199,30 @@ def esg_hr(company: str, year: Optional[int] = None, limit: int = 50) -> dict:
             "公司代號": _pick(r, "公司代號", "股票代號", "StockCode"),
             "公司名稱": comp,
             "年度": y,
-            "員工薪資中位數": _pick(r, "員工薪資中位數", "薪資中位數", "MedianSalary", "薪資中位"),
-            "員工薪資平均數": _pick(r, "員工薪資平均數", "薪資平均數", "AverageSalary", "薪資平均"),
-            "女性主管比例": _pick(r, "女性主管比例", "女性主管比", "FemaleManagerRatio"),
-            "資料列原始": r,  # 方便除錯（前端可選擇隱藏）
+            "員工薪資中位數": _pick(
+                r,
+                "員工薪資中位數",
+                "薪資中位數",
+                "MedianSalary",
+                "薪資中位",
+                "非擔任主管之全時員工薪資中位數(仟元/人)",
+            ),
+            "員工薪資平均數": _pick(
+                r,
+                "員工薪資平均數",
+                "薪資平均數",
+                "AverageSalary",
+                "薪資平均",
+                "員工薪資平均數(仟元/人)",
+            ),
+            "女性主管比例": _pick(
+                r,
+                "女性主管比例",
+                "女性主管比",
+                "FemaleManagerRatio",
+                "管理職女性主管佔比",
+            ),
+            "資料列原始": r,
         }
         out.append(item)
         if len(out) >= limit:
@@ -224,8 +248,8 @@ def labor_violations(company: str, since_year: Optional[int] = None, limit: int 
     """
     查勞動部違反勞基法紀錄（官方彙總）。
     Args:
-      company: 事業單位名稱
-      since_year: 過濾公告年份（>=）
+      company: 事業單位名稱（可用部分關鍵字）
+      since_year: 公告日期的年份 >= since_year 才算
       limit: 最多回傳筆數
     """
     rows = _fetch_csv_rows(LAB_VIO_URL)
@@ -233,24 +257,28 @@ def labor_violations(company: str, since_year: Optional[int] = None, limit: int 
     by_year: Dict[str, int] = {}
 
     for r in rows:
-        comp = _pick(r, "事業單位名稱", "雇主名稱", "公司名稱", "name")
+        comp = _pick(r, "事業單位名稱或負責人", "事業單位名稱", "雇主名稱", "公司名稱", "name")
         if not comp:
             continue
-        if not _match_company(comp, company):
+
+        # 支援部分關鍵字比對（公司名包含即可）
+        if company not in comp:
             continue
 
+        # 公告日期
         date = _pick(r, "公告日期", "公布日期", "處分日期", "date", "公告日")
         y = (date or "")[:4]
+
+        # 年份過濾
         if since_year is not None and (not y.isdigit() or int(y) < int(since_year)):
             continue
 
         item = {
             "事業單位名稱": comp,
-            "所在地": _pick(r, "所在地", "所在縣市", "縣市"),
-            "違反法條": _pick(r, "違反法條", "法條"),
-            "違反法條內容": _pick(r, "違反法條內容", "違規內容", "事實摘要"),
             "公告日期": date,
-            "裁處機關": _pick(r, "裁處機關", "主管機關", "機關"),
+            "裁處機關": _pick(r, "主管機關", "裁處機關", "機關"),
+            "違反法條": _pick(r, "違法法規法條", "違反法條", "法條"),
+            "違反法條內容": _pick(r, "違反法規內容", "違反法條內容", "違規內容", "事實摘要"),
             "罰鍰金額": _pick(r, "罰鍰金額", "處分金額", "金額"),
             "資料列原始": r,
         }
@@ -268,7 +296,7 @@ def labor_violations(company: str, since_year: Optional[int] = None, limit: int 
         "stats": {"count_by_year": by_year},
         "source_url": LAB_VIO_URL,
         "fetched_at": _iso_now(),
-        "meta": {"query": company, "since_year": since_year, "partial_match": PARTIAL_MATCH},
+        "meta": {"query": company, "since_year": since_year, "partial_match": True},
     }
 
 
@@ -280,33 +308,42 @@ def labor_violations(company: str, since_year: Optional[int] = None, limit: int 
 # ------------------------------------------------------------
 @mcp.tool()
 def ge_work_equality_violations(
-    company: str, since_year: Optional[int] = None, limit: int = 50
-) -> dict:
+    company: str, since_year: Optional[int] = None, limit: int = 50) -> dict:
     """
     查性平工作法違規紀錄（官方彙總）。
+    Args:
+      company: 公司名稱或關鍵字
+      since_year: 公告日期包含該年份字串 (ex: 2025)
+      limit: 最多回傳筆數
     """
     rows = _fetch_csv_rows(GE_VIO_URL)
     out: List[Dict[str, str]] = []
     by_year: Dict[str, int] = {}
 
     for r in rows:
-        comp = _pick(r, "事業單位名稱", "雇主名稱", "公司名稱", "name")
+        # ⚡ 修正公司欄位
+        comp = _pick(r, "事業單位名稱或負責人", "事業單位名稱", "雇主名稱", "公司名稱", "name")
         if not comp:
             continue
-        if not _match_company(comp, company):
+
+        # ⚡ 改用模糊比對
+        if company not in comp:
             continue
 
         date = _pick(r, "公告日期", "公布日期", "處分日期", "date")
         y = (date or "")[:4]
-        if since_year is not None and (not y.isdigit() or int(y) < int(since_year)):
+
+        # ⚡ 改為「字串包含」模式
+        if since_year is not None and str(since_year) not in (date or ""):
             continue
 
         item = {
             "事業單位名稱": comp,
-            "違反法條": _pick(r, "違反法條", "法條"),
-            "違反法條內容": _pick(r, "違反法條內容", "違規內容", "事實摘要"),
             "公告日期": date,
-            "裁處機關": _pick(r, "裁處機關", "主管機關", "機關"),
+            "裁處機關": _pick(r, "主管機關", "裁處機關", "機關"),
+            "違反法條": _pick(r, "違法法規法條", "違反法條", "法條"),
+            "違反法條內容": _pick(r, "違反法規內容", "違反法條內容", "違規內容", "事實摘要"),
+            "罰鍰金額": _pick(r, "罰鍰金額", "處分金額", "金額"),
             "資料列原始": r,
         }
         out.append(item)
@@ -323,9 +360,8 @@ def ge_work_equality_violations(
         "stats": {"count_by_year": by_year},
         "source_url": GE_VIO_URL,
         "fetched_at": _iso_now(),
-        "meta": {"query": company, "since_year": since_year, "partial_match": PARTIAL_MATCH},
+        "meta": {"query": company, "since_year": since_year, "partial_match": True},
     }
-
 
 # ------------------------------------------------------------
 # Server Entrypoint
@@ -346,12 +382,12 @@ if __name__ == "__main__":
             # STDIO 不需要 host/port
             print("Running on STDIO")
             mcp.run(transport="stdio")
-            
+
         elif args.transport in ("http", "sse"):
             host, port = (args.http or "127.0.0.1:7332").split(":")
             print(f"Running on {args.transport} at http://{host}:{port}")
             mcp.run(transport=args.transport, host=host, port=int(port))
-            
+
     elif args.http:
         host, port = args.http.split(":")
         print(f"Running on HTTP at http://{host}:{port}")
@@ -360,4 +396,3 @@ if __name__ == "__main__":
         # 預設走 STDIO
         print("Running on STDIO")
         mcp.run()  # 等同 mcp.run(transport="stdio")
-
