@@ -1,5 +1,7 @@
 import asyncio
 import time
+import sys, os
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from pydantic import BaseModel
 
@@ -26,9 +28,10 @@ settings = Settings(
     logger=LoggerSettings(type="file", level="debug"),
     mcp=MCPSettings(
         servers={
-            "fetch": MCPServerSettings(
-                command="uvx",
-                args=["mcp-server-fetch"],
+            "job_guardian": MCPServerSettings(
+                command="python",
+                args=["mcp_server/server.py"],   # 指向你的 server.py
+                transport="stdio"
             ),
         }
     ),

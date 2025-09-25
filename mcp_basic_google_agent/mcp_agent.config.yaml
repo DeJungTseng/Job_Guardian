@@ -12,9 +12,11 @@ logger:
 
 mcp:
   servers:
-    fetch:
-      command: "uvx"
-      args: ["mcp-server-fetch"]
+    job_guardian:
+      command: "python"
+      args: ["mcp_server/server.py"]
+      transport: "stdio"
+
 
 google:
   # Secrets (API keys, etc.) are stored in an mcp_agent.secrets.yaml file which can be gitignored

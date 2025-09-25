@@ -1,4 +1,9 @@
 mcp==1.14.1
 python-dotenv>=1.0.1
 requests>=2.32.3
-httpx[http2]
+httpx[http2]>=0.28.1
+anyio>=4.0.0
+starlette>=0.48.0
+sse-starlette>=3.0.2
+uvicorn>=0.35.0
+pydantic>=2.11.0
