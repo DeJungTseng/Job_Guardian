@@ -22,6 +22,8 @@ class Essay(BaseModel):
     body: str
     conclusion: str
 
+# 回到專案根目錄
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))  
 
 settings = Settings(
     execution_engine="asyncio",
@@ -30,21 +32,19 @@ settings = Settings(
         servers={
             "job_guardian": MCPServerSettings(
                 command="python",
-                args=["mcp_server/server.py"],   # 指向你的 server.py
+                args=[os.path.join(BASE_DIR, "mcp_server", "server.py")],
                 transport="stdio"
             ),
         }
     ),
-    google=GoogleSettings(
-        default_model="gemini-2.0-flash",
-    ),
+    google=GoogleSettings(default_model="gemini-2.0-flash"),
 )
 
 # Settings can either be specified programmatically,
 # or loaded from mcp_agent.config.yaml/mcp_agent.secrets.yaml
 app = MCPApp(
-    name="mcp_basic_agent"
-    # settings=settings
+    name="mcp_basic_agent",
+    settings=settings
 )
 
 
@@ -55,20 +55,20 @@ async def example_usage():
 
         logger.info("Current config:", data=context.config.model_dump())
 
-        finder_agent = Agent(
-            name="finder",
+        job_guardian_agent = Agent(
+            name="job_guardian",
             instruction="""You are an agent with the ability to fetch URLs. Your job is to identify 
             the closest match to a user's request, make the appropriate tool calls, 
             and return the URI and CONTENTS of the closest match.""",
-            server_names=["fetch"],
+            server_names=["job_guardian"],
         )
 
-        async with finder_agent:
-            logger.info("finder: Connected to server, calling list_tools...")
-            result = await finder_agent.list_tools()
+        async with job_guardian_agent:
+            logger.info("job_guardian: Connected to server, calling list_tools...")
+            result = await job_guardian_agent.list_tools()
             logger.info("Tools available:", data=result.model_dump())
 
-            llm = await finder_agent.attach_llm(GoogleAugmentedLLM)
+            llm = await job_guardian_agent.attach_llm(GoogleAugmentedLLM)
 
             result = await llm.generate_str(
                 message="Print the first 2 paragraphs of https://modelcontextprotocol.io/introduction",
