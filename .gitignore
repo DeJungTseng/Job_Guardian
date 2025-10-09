@@ -11,3 +11,14 @@ __pycache__/
 
 # Jupyter checkpoints
 .ipynb_checkpoints/
+# Python virtual environments
+.venv/
+__pycache__/
+*.pyc
+
+# OS / editor junk
+.DS_Store
+*.log
+
+# WSL temp
+*.swp
