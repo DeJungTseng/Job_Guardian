@@ -70,10 +70,12 @@ async def example_usage():
 
             llm = await job_guardian_agent.attach_llm(GoogleAugmentedLLM)
 
-            result = await llm.generate_str(
-                message="Print the first 2 paragraphs of https://modelcontextprotocol.io/introduction",
+            result = await job_guardian_agent.call_tool(
+                "esg_hr",
+                {"company": "台積電"}
             )
-            logger.info(f"First 2 paragraphs of Model Context Protocol docs: {result}")
+
+            logger.info(f"ESG HR: {result}")
 
             result = await llm.generate_structured(
                 message="Create a short essay using the first 2 paragraphs.",
