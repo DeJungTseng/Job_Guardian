@@ -1,6 +1,11 @@
 import asyncio
-import time
 import sys, os
+import time
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
+
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from pydantic import BaseModel
@@ -15,14 +20,14 @@ from mcp_agent.config import (
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 
-
+# === Data Model ===
 class Essay(BaseModel):
     title: str
     body: str
     conclusion: str
 
 
-# 回到專案根目錄
+# === Global Settings ===
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
 settings = Settings(
@@ -40,14 +45,31 @@ settings = Settings(
     google=GoogleSettings(default_model="gemini-2.0-flash"),
 )
 
-app = MCPApp(name="mcp_basic_agent", settings=settings)
+# === FastAPI 初始化 ===
+app = FastAPI(title="Job Guardian API", version="1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # ⚠️ 上線時可改成你的 render 前端網域
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# === Agent 狀態 ===
+mcp_app = MCPApp(name="job_guardian_agent", settings=settings)
+agent_state = {"ready": False, "agent": None, "llm": None, "logs": []}
 
 
-async def example_usage():
-    async with app.run() as agent_app:
-        logger = agent_app.logger
-        context = agent_app.context
+# === 啟動事件 ===
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(start_agent())  # 背景啟動
+    agent_state["logs"].append("🚀 Agent startup task scheduled.")
 
+
+async def start_agent():
+    async with mcp_app.run() as agent_app:
         job_guardian_agent = Agent(
             name="job_guardian",
             instruction=(
@@ -55,63 +77,79 @@ async def example_usage():
                 "1️⃣ esg_hr → 查詢公司 ESG 人力發展資料（薪資、福利、女性主管比例）\n"
                 "2️⃣ labor_violations → 查詢勞動部違反勞基法紀錄\n"
                 "3️⃣ ge_work_equality_violations → 查詢違反性別工作平等法紀錄\n\n"
-                "根據使用者輸入內容（公司名稱或自然語句）自動選擇正確的 tool 並回傳結果。\n"
-                "若查詢公司資料，優先使用 esg_hr。\n"
-                "若提到『違法』、『罰鍰』、『違反勞基法』等字眼，使用 labor_violations。\n"
-                "若提到『性別平等』、『性騷擾』、『平權』等字眼，使用 ge_work_equality_violations。\n"
-                "若同時提到「違法」與「性別」，請優先使用 ge_work_equality_violations。\n"
-                "若句子中僅有公司名稱，請使用 esg_hr。"
+                "根據使用者輸入內容（公司名稱或自然語句）自動選擇正確的 tool 並回傳結果。"
             ),
             server_names=["job_guardian"],
         )
 
         async with job_guardian_agent:
             llm = await job_guardian_agent.attach_llm(GoogleAugmentedLLM)
+            agent_state.update({
+                "ready": True,
+                "agent": job_guardian_agent,
+                "llm": llm
+            })
+            agent_state["logs"].append("✅ Job Guardian agent initialized and ready.")
 
-            print("🧭 Job Guardian 啟動成功！輸入公司名稱或查詢句子（Ctrl+C 或輸入 exit 離開）\n")
-
-            # 🔁 多輪查詢迴圈
+            # 保持常駐
             while True:
-                try:
-                    user_query = input("請輸入查詢內容: ").strip()
-                except KeyboardInterrupt:
-                    print("\n👋 偵測到 Ctrl+C，中止查詢並結束程式。")
-                    break
+                await asyncio.sleep(60)
 
-                if user_query.lower() in {"exit", "quit", "q"}:
-                    print("👋 結束查詢，感謝使用 Job Guardian！")
-                    break
 
-                start = time.time()
-                try:
-                    result = await llm.generate_str(
-                        message=f"根據輸入內容「{user_query}」，請查詢對應的公司紀錄。"
-                    )
+# === API ===
+@app.get("/")
+async def root():
+    return {"status": "running", "agent_ready": agent_state["ready"]}
 
-                    print("\n🪄 LLM 自動推理結果：")
-                    print(result)
 
-                    structured = await llm.generate_structured(
-                        message=f"根據輸入內容「{user_query}」，請總結這家公司的狀況（以 Essay 格式回傳）。",
-                        response_model=Essay,
-                    )
+@app.get("/logs")
+async def logs():
+    """顯示 agent 狀態（給 telemetry iframe 用）"""
+    return PlainTextResponse("\n".join(agent_state["logs"][-50:]))
 
-                    print("\n📄 結構化輸出：")
-                    print(structured)
 
-                except KeyboardInterrupt:
-                    print("\n⚠️ 偵測到 Ctrl+C，中止本輪查詢。\n")
-                    continue
-                except Exception as e:
-                    logger.error(f"查詢失敗：{e}")
-                    print(f"⚠️ 查詢時發生錯誤：{e}")
+@app.post("/query")
+async def query(request: Request):
+    """Assistant-UI 呼叫的主要 API"""
+    if not agent_state["ready"]:
+        return JSONResponse({"error": "Agent 尚未初始化完成"}, status_code=503)
 
-                end = time.time()
-                print(f"\n⏱️ 本次查詢耗時：{end - start:.2f}s\n{'-'*60}\n")
+    data = await request.json()
+    user_query = data.get("query", "").strip()
+    if not user_query:
+        return JSONResponse({"error": "請輸入查詢內容"}, status_code=400)
+
+    llm = agent_state["llm"]
+    start = time.time()
+
+    try:
+        # 1️⃣ LLM 判斷應用的 tool 並查詢
+        result = await llm.generate_str(
+            message=f"根據輸入內容「{user_query}」，請查詢對應的公司紀錄。"
+        )
+
+        # 2️⃣ 生成結構化摘要
+        structured = await llm.generate_structured(
+            message=f"根據輸入內容「{user_query}」，請總結這家公司的狀況（以 Essay 格式回傳）。",
+            response_model=Essay,
+        )
+
+        elapsed = time.time() - start
+        msg = f"✅ 查詢完成 ({elapsed:.2f}s)：{user_query}"
+        agent_state["logs"].append(msg)
+
+        return {
+            "query": user_query,
+            "result": result,
+            "structured": structured.model_dump(),
+            "elapsed": elapsed,
+        }
+
+    except Exception as e:
+        err_msg = f"❌ 查詢失敗: {e}"
+        agent_state["logs"].append(err_msg)
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(example_usage())
-    except KeyboardInterrupt:
-        print("\n👋 程式已安全中止，再見！")
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
