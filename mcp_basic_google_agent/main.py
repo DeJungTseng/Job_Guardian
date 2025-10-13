@@ -10,13 +10,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from pydantic import BaseModel
 from mcp_agent.app import MCPApp
-from mcp_agent.config import (
-    GoogleSettings,
-    Settings,
-    LoggerSettings,
-    MCPSettings,
-    MCPServerSettings,
-)
+from mcp_agent.config import get_settings, MCPSettings, MCPServerSettings
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
 
@@ -30,19 +24,17 @@ class Essay(BaseModel):
 # === Global Settings ===
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
-settings = Settings(
-    execution_engine="asyncio",
-    logger=LoggerSettings(type="file", level="debug"),
-    mcp=MCPSettings(
-        servers={
-            "job_guardian": MCPServerSettings(
-                command="python",
-                args=[os.path.join(BASE_DIR, "mcp_server", "server.py")],
-                transport="stdio",
-            ),
-        }
-    ),
-    google=GoogleSettings(default_model="gemini-2.0-flash"),
+# Load settings from YAML files
+settings = get_settings()
+
+# Programmatically set the server path to ensure it's absolute,
+# resolving the issue from loading the relative path in the YAML file.
+if not settings.mcp:
+    settings.mcp = MCPSettings()
+settings.mcp.servers["job_guardian"] = MCPServerSettings(
+    command="python",
+    args=[os.path.join(BASE_DIR, "mcp_server", "server.py")],
+    transport="stdio",
 )
 
 # === FastAPI 初始化 ===

@@ -9,6 +9,9 @@ import {
 
 const MyModelAdapter: ChatModelAdapter = {
     async run({ messages, abortSignal }) {
+        const lastMessage = messages.at(-1);
+        const query = lastMessage?.content.find(c => c.type === 'text')?.text ?? '';
+
         // TODO replace with your own API
         const result = await fetch("http://localhost:8000/query", {
             method: "POST",
@@ -17,7 +20,7 @@ const MyModelAdapter: ChatModelAdapter = {
             },
             // forward the messages in the chat to the API
             body: JSON.stringify({
-                messages,
+                query,
             }),
             // if the user hits the "cancel" button or escape keyboard key, cancel the request
             signal: abortSignal,
@@ -28,7 +31,7 @@ const MyModelAdapter: ChatModelAdapter = {
             content: [
                 {
                     type: "text",
-                    text: data.text,
+                    text: data.text ?? "",
                 },
             ],
         };
