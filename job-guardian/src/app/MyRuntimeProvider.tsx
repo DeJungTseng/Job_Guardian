@@ -31,7 +31,7 @@ const MyModelAdapter: ChatModelAdapter = {
             content: [
                 {
                     type: "text",
-                    text: data.text ?? "",
+                    text: data.result ?? "",
                 },
             ],
         };

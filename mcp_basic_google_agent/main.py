@@ -65,11 +65,13 @@ async def start_agent():
         job_guardian_agent = Agent(
             name="job_guardian",
             instruction=(
-                "You are Job Guardian, an intelligent assistant that can use three tools:\n"
-                "1️⃣ esg_hr → 查詢公司 ESG 人力發展資料（薪資、福利、女性主管比例）\n"
-                "2️⃣ labor_violations → 查詢勞動部違反勞基法紀錄\n"
-                "3️⃣ ge_work_equality_violations → 查詢違反性別工作平等法紀錄\n\n"
-                "根據使用者輸入內容（公司名稱或自然語句）自動選擇正確的 tool 並回傳結果。"
+                "你是一個使用工具來回答問題的智慧助理。\n"
+                "可用的工具有：\n"
+                "1. esg_hr: 查詢公司的 ESG 人力發展資料（薪資、福利、女性主管比例）。\n"
+                "2. labor_violations: 查詢勞動部違反勞基法紀錄。\n"
+                "3. ge_work_equality_violations: 查詢違反性別工作平等法紀錄。\n\n"
+                "你的任務是根據使用者的問題呼叫正確的工具。\n"
+                "當你收到工具回傳的結果後，你必須將該結果撰寫成一段通順的中文摘要來回答使用者。"
             ),
             server_names=["job_guardian"],
         )
@@ -115,15 +117,9 @@ async def query(request: Request):
     start = time.time()
 
     try:
-        # 1️⃣ LLM 判斷應用的 tool 並查詢
+        # LLM 判斷應用的 tool 並查詢 + 總結
         result = await llm.generate_str(
-            message=f"根據輸入內容「{user_query}」，請查詢對應的公司紀錄。"
-        )
-
-        # 2️⃣ 生成結構化摘要
-        structured = await llm.generate_structured(
-            message=f"根據輸入內容「{user_query}」，請總結這家公司的狀況（以 Essay 格式回傳）。",
-            response_model=Essay,
+            message=f"根據輸入內容「{user_query}」，請查詢對應的公司紀錄並回傳總結。"
         )
 
         elapsed = time.time() - start
@@ -133,7 +129,6 @@ async def query(request: Request):
         return {
             "query": user_query,
             "result": result,
-            "structured": structured.model_dump(),
             "elapsed": elapsed,
         }
 

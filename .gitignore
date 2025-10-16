@@ -22,3 +22,5 @@ __pycache__/
 
 # WSL temp
 *.swp
+
+/mcp_basic_google_agent/mcp_agent.secrets.yaml
