@@ -4,11 +4,14 @@ import {
   ArrowDownIcon,
   ArrowUpIcon,
   CheckIcon,
+  ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   CopyIcon,
   PencilIcon,
+  PlusIcon,
   RefreshCwIcon,
+  Share2Icon,
   Square,
 } from "lucide-react";
 
@@ -37,6 +40,25 @@ import {
 
 import { cn } from "@/lib/utils";
 
+const ThreadHeader: FC = () => {
+  return (
+    <div className="aui-thread-header-root flex items-center justify-between p-2 border-b">
+      <TooltipIconButton tooltip="New Thread">
+        <PlusIcon />
+      </TooltipIconButton>
+
+      <Button variant="ghost" className="flex items-center gap-1">
+        <span>GPT-4o-mini</span>
+        <ChevronDownIcon className="size-4" />
+      </Button>
+
+      <TooltipIconButton tooltip="Share">
+        <Share2Icon />
+      </TooltipIconButton>
+    </div>
+  );
+};
+
 export const Thread: FC = () => {
   return (
     <LazyMotion features={domAnimation}>
@@ -47,6 +69,7 @@ export const Thread: FC = () => {
             ["--thread-max-width" as string]: "44rem",
           }}
         >
+          <ThreadHeader />
           <ThreadPrimitive.Viewport className="aui-thread-viewport relative flex flex-1 flex-col overflow-x-auto overflow-y-scroll px-4">
             <ThreadPrimitive.If empty>
               <ThreadWelcome />
