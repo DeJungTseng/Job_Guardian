@@ -13,7 +13,8 @@ const MyModelAdapter: ChatModelAdapter = {
         const query = lastMessage?.content.find(c => c.type === 'text')?.text ?? '';
 
         // TODO replace with your own API
-        const result = await fetch("http://localhost:8000/query", {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+        const result = await fetch(`${apiUrl}/query`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",

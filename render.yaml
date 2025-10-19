@@ -1,0 +1,33 @@
+services:
+  # Backend Service (FastAPI)
+  - type: web
+    name: job-guardian-backend
+    runtime: python
+    envVars:
+      - key: PYTHON_VERSION
+        value: '3.11'
+    buildCommand: |
+      pip install -r requirements.txt
+      pip install .
+      pip install google-genai
+    startCommand: uvicorn mcp_basic_google_agent.main:app --host 0.0.0.0 --port $PORT
+    buildFilter:
+      paths:
+        - src/mcp_agent/**
+        - mcp_basic_google_agent/**
+        - pyproject.toml
+        - requirements.txt
+
+  # Frontend Service (Next.js)
+  - type: web
+    name: job-guardian-frontend
+    runtime: node
+    rootDir: job-guardian
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: job-guardian-backend
+          property: url
