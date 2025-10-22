@@ -13,6 +13,8 @@ from mcp_agent.app import MCPApp
 from mcp_agent.config import get_settings, MCPSettings, MCPServerSettings
 from mcp_agent.agents.agent import Agent
 from mcp_agent.workflows.llm.augmented_llm_google import GoogleAugmentedLLM
+from telemetry.config import setup_telemetry
+from telemetry.tracing import trace_span
 
 # === Data Model ===
 class Essay(BaseModel):
@@ -56,6 +58,7 @@ agent_state = {"ready": False, "agent": None, "llm": None, "logs": []}
 # === 啟動事件 ===
 @app.on_event("startup")
 async def startup_event():
+    setup_telemetry("job_guardian_backend")
     asyncio.create_task(start_agent())  # 背景啟動
     agent_state["logs"].append("🚀 Agent startup task scheduled.")
 
@@ -102,6 +105,30 @@ async def logs():
     return PlainTextResponse("\n".join(agent_state["logs"][-50:]))
 
 
+@trace_span("receive_prompt")
+def receive_prompt(user_query: str):
+    """Logs the received user query."""
+    agent_state["logs"].append(f"🔍 Received query: {user_query}")
+
+@trace_span("llm_tool_call_and_synthesis")
+async def execute_llm_generation(llm, user_query: str) -> str:
+    """Calls the LLM to generate a response using tools."""
+    result = await llm.generate_str(
+        message=f"根據輸入內容「{user_query}」，請查詢對應的公司紀錄並回傳總結。"
+    )
+    return result
+
+@trace_span("format_response")
+def format_response(query: str, result: str, elapsed: float):
+    """Formats the final successful response."""
+    msg = f"✅ 查詢完成 ({elapsed:.2f}s)：{query}"
+    agent_state["logs"].append(msg)
+    return {
+        "query": query,
+        "result": result,
+        "elapsed": elapsed,
+    }
+
 @app.post("/query")
 async def query(request: Request):
     """Assistant-UI 呼叫的主要 API"""
@@ -113,24 +140,19 @@ async def query(request: Request):
     if not user_query:
         return JSONResponse({"error": "請輸入查詢內容"}, status_code=400)
 
+    receive_prompt(user_query)
+
     llm = agent_state["llm"]
     start = time.time()
 
     try:
         # LLM 判斷應用的 tool 並查詢 + 總結
-        result = await llm.generate_str(
-            message=f"根據輸入內容「{user_query}」，請查詢對應的公司紀錄並回傳總結。"
-        )
+        result = await execute_llm_generation(llm, user_query)
 
         elapsed = time.time() - start
-        msg = f"✅ 查詢完成 ({elapsed:.2f}s)：{user_query}"
-        agent_state["logs"].append(msg)
-
-        return {
-            "query": user_query,
-            "result": result,
-            "elapsed": elapsed,
-        }
+        
+        response = format_response(user_query, result, elapsed)
+        return response
 
     except Exception as e:
         err_msg = f"❌ 查詢失敗: {e}"
