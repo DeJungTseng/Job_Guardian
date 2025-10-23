@@ -1,0 +1,9 @@
+{"level":"INFO","timestamp":"2025-10-23T21:03:41.479987","namespace":"mcp_agent.core.context","message":"Configuring logger with level: debug"}
+{"level":"INFO","timestamp":"2025-10-23T21:03:41.480367","namespace":"mcp_agent.job_guardian_agent","message":"Loading subagents from configuration..."}
+{"level":"DEBUG","timestamp":"2025-10-23T21:03:41.480529","namespace":"mcp_agent.job_guardian_agent","message":"Registering global workflow task: mcp_agent.workflows.llm.augmented_llm_google.GoogleCompletionTasks.request_completion_task"}
+{"level":"DEBUG","timestamp":"2025-10-23T21:03:41.480511","namespace":"mcp_agent.job_guardian_agent","message":"Registering global workflow tasks with application instance."}
+{"level":"INFO","timestamp":"2025-10-23T21:03:41.480919","namespace":"mcp_agent.job_guardian_agent","message":"MCPApp initialized","data":{"data":{"progress_action":"Running","target":"job_guardian_agent","agent_name":"mcp_application_loop","session_id":"b2a12657-c14f-4688-9d2f-4961722e329d"}}}
+{"level":"DEBUG","timestamp":"2025-10-23T21:03:41.480572","namespace":"mcp_agent.job_guardian_agent","message":"Registering global workflow task: mcp_agent.workflows.llm.augmented_llm_google.GoogleCompletionTasks.request_structured_completion_task"}
+{"level":"DEBUG","timestamp":"2025-10-23T21:03:41.481585","namespace":"mcp_agent.agents.agent","message":"Initializing agent job_guardian..."}
+{"level":"DEBUG","timestamp":"2025-10-23T21:03:41.482058","namespace":"mcp_agent.agents.agent","message":"Initialized aggregator for agent 'job_guardian'","data":{"data":{"refcount":1,"server_names":["job_guardian"],"connection_persistence":true}}}
+{"level":"INFO","timestamp":"2025-10-23T21:03:41.502306","namespace":"mcp_agent.job_guardian_agent","message":"MCPApp cleanup","data":{"data":{"progress_action":"Finished","target":"job_guardian_agent","agent_name":"mcp_application_loop"}}}
