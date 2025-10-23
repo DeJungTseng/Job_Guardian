@@ -14,4 +14,4 @@ opentelemetry-sdk
 opentelemetry-exporter-otlp
 opentelemetry-instrumentation
 rich
-
+flask
