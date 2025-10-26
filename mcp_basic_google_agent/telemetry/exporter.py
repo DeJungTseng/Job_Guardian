@@ -1,12 +1,9 @@
 import os
 import json
 from datetime import datetime
-from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult, ConsoleSpanExporter
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-
-# ✅ rich 支援
+from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 from rich.console import Console
-from rich.json import JSON
+from rich.syntax import Syntax
 
 console = Console()
 
@@ -25,60 +22,80 @@ def _safe_serialize(obj):
             return str(obj)
 
 
-class RichConsoleExporter(SpanExporter):
-    """使用 rich 彩色輸出 span JSON 並同步寫入檔案"""
+class MCPActivityExporter(SpanExporter):
+    """
+    專為 Job Guardian 設計的 Telemetry Exporter：
+    - 只輸出與 MCP 工具互動相關的 spans
+    - 簡化時間欄位（不輸出 start_time / end_time）
+    - 美化顯示格式類似 log stream
+    - 可在 Render 部署環境保持 Rich 高亮輸出
+    """
 
-    def __init__(self, filepath="mcp-agent-trace.jsonl"):
+    def __init__(self, filepath="mcp-activity.log"):
         self.filepath = filepath
-        # 確保目錄存在
         os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
-        console.print(f"[green][otel][/green] Writing traces to [bold]{self.filepath}[/bold]")
+        console.print(f"[green][otel][/green] Logging MCP activities to [bold]{self.filepath}[/bold]")
 
     def export(self, spans):
-        lines = []
+        log_lines = []
         for span in spans:
-            data = {
-                "name": span.name,
-                "context": {
-                    "trace_id": str(span.context.trace_id),
-                    "span_id": str(span.context.span_id),
-                },
-                "start_time": span.start_time,
-                "end_time": span.end_time,
-                "status": str(span.status.status_code),
-                "attributes": _safe_serialize(span.attributes),
-                "timestamp": datetime.utcnow().isoformat() + "Z",
-            }
+            name = span.name.lower()
 
-            # ✅ 彩色輸出
-            console.print(JSON.from_data(data))
+            # 🧩 僅關心 MCP 過程（過濾掉初始化、load_servers 等）
+            if not any(key in name for key in [
+                "receive_prompt",
+                "tool_call",
+                "send_request",
+                "execute_llm_generation",
+                "format_response",
+                "mcpaggregator",
+                "mcp_agentclientsession"
+            ]):
+                continue
 
-            # ✅ 寫入 JSONL
-            lines.append(json.dumps(data, ensure_ascii=False))
+            # 提取基本欄位
+            attrs = _safe_serialize(span.attributes)
+            ctx = span.context
 
-        # 追加寫入
-        with open(self.filepath, "a", encoding="utf-8") as f:
-            for line in lines:
-                f.write(line + "\n")
+            # 🧠 Level 判定
+            if "error" in name:
+                level = "ERROR"
+            elif "receive" in name:
+                level = "INFO"
+            elif "call" in name or "send" in name:
+                level = "DEBUG"
+            else:
+                level = "INFO"
+
+            # 📦 組出 log prefix
+            prefix = f"[{level}] {datetime.utcnow().isoformat(timespec='seconds')} {span.name}"
+
+            # 🧾 美化 attributes
+            pretty_json = json.dumps(
+                {"data": attrs},
+                indent=2,
+                ensure_ascii=False
+            )
+            syntax = Syntax(pretty_json, "json", theme="ansi_dark", word_wrap=True)
+
+            # ✅ 終端輸出（Render log 也支援 Rich）
+            console.print(prefix)
+            console.print(syntax)
+
+            # ✅ 寫入檔案（純文字方便 iframe 讀取）
+            log_entry = f"{prefix}\n{pretty_json}\n"
+            log_lines.append(log_entry)
+
+        # 附加寫入檔案
+        if log_lines:
+            with open(self.filepath, "a", encoding="utf-8") as f:
+                for line in log_lines:
+                    f.write(line + "\n")
 
         return SpanExportResult.SUCCESS
 
 
 def get_exporter():
-    """根據環境變數決定 exporter"""
-    mode = os.getenv("OTEL_EXPORT_MODE", "console").lower()
-
-    if mode == "otlp":
-        endpoint = os.getenv(
-            "OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318/v1/traces"
-        )
-        print(f"[otel] Using OTLP exporter -> {endpoint}")
-        return OTLPSpanExporter(endpoint=endpoint)
-
-    elif mode == "rich":
-        print("[otel] Using Rich Console exporter + JSONL trace output")
-        return RichConsoleExporter(filepath="mcp-agent-trace.jsonl")
-
-    else:
-        print("[otel] Using Plain Console exporter")
-        return ConsoleSpanExporter()
+    """使用自訂的 MCPActivityExporter"""
+    print("[otel] Using MCP Activity Exporter (human-readable logs)")
+    return MCPActivityExporter(filepath="telemetry/mcp-activity.log")
