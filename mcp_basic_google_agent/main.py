@@ -1,6 +1,7 @@
 import asyncio
 import sys, os
 import time
+import subprocess
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -58,6 +59,11 @@ agent_state = {"ready": False, "agent": None, "llm": None, "logs": []}
 # === 啟動事件 ===
 @app.on_event("startup")
 async def startup_event():
+    # 啟動 telemetry server
+    telemetry_server_path = os.path.join(os.path.dirname(__file__), "telemetry_server.py")
+    subprocess.Popen([sys.executable, telemetry_server_path])
+    agent_state["logs"].append("📡 Telemetry server started.")
+
     setup_telemetry("job_guardian_backend")
     asyncio.create_task(start_agent())  # 背景啟動
     agent_state["logs"].append("🚀 Agent startup task scheduled.")
