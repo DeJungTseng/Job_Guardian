@@ -30,4 +30,3 @@ services:
         fromService:
           type: web
           name: job-guardian-backend
-          property: url
