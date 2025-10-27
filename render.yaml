@@ -26,8 +26,13 @@ services:
     buildCommand: npm install && npm run build
     startCommand: npm start
     envVars:
-      - key: NEXT_PUBLIC_API_URL
+      - key: BACKEND_HOST
         fromService:
           type: web
           name: job-guardian-backend
-          envVar: URL
+          property: host
+      - key: BACKEND_PORT
+        fromService:
+          type: web
+          name: job-guardian-backend
+          property: port
