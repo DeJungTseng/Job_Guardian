@@ -30,3 +30,4 @@ services:
         fromService:
           type: web
           name: job-guardian-backend
+          envVar: URL
